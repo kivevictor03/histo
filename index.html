@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Symulator Ciałka Nerkowego</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0c0c1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 24px 20px;
+        }
+        .page { max-width: 1240px; margin: 0 auto; }
+
+        /* ── HEADER ── */
+        .header {
+            display: flex; align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 18px; flex-wrap: wrap; gap: 12px;
+        }
+        .title-section h1 { font-size: 22px; color: #fff; margin-bottom: 5px; }
+        .title-section p  { font-size: 12px; color: #777; max-width: 440px; line-height: 1.5; }
+        .stats-bar { display: flex; gap: 26px; align-items: flex-start; }
+        .stat-item { text-align: right; }
+        .stat-label { font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+        .stat-val   { font-size: 20px; font-weight: 700; color: #fff; }
+        .stat-unit  { font-size: 11px; color: #777; }
+        .s-norma { color: #4caf50; } .s-warn { color: #ff9800; } .s-crit { color: #f44336; }
+
+        /* ── MAIN GRID ── */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 20px;
+            align-items: start;
+        }
+
+        /* ── LEFT COLUMN ── */
+        .viz-wrapper {
+            background: #10101f; border-radius: 14px;
+            overflow: hidden; margin-bottom: 18px;
+            border: 1px solid #1e1e35;
+        }
+        #viz, #ph-viz { display: block; width: 100%; height: auto; }
+        .controls { display: flex; flex-direction: column; gap: 13px; }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 13px; color: #999; display: flex; justify-content: space-between; }
+        label span { color: #ddd; font-weight: 600; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #7c3aed; }
+
+        .controls-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 4px;
+        }
+        .controls-header-title {
+            font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: .08em;
+        }
+        .reset-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: #1a1428; color: #c084fc;
+            border: 1px solid #3a2860; border-radius: 8px;
+            padding: 6px 12px; font-size: 11px; font-weight: 600;
+            cursor: pointer; transition: all .15s ease;
+            font-family: inherit;
+        }
+        .reset-btn:hover { background: #2a1840; color: #fff; border-color: #7c3aed; }
+        .reset-btn:active { transform: scale(.97); }
+
+        /* GFR scale bar */
+        .gfr-legend {
+            margin-top: 16px; background: #10101f;
+            border: 1px solid #1e1e35; border-radius: 10px; padding: 14px 18px;
+        }
+        .gfr-legend-title { font-size: 10px; color: #777; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; }
+        .gfr-bar-wrap { position: relative; height: 10px; overflow: visible; }
+        .gfr-seg { position: absolute; top: 0; height: 10px; }
+        .gfr-ranges { display: flex; gap: 14px; margin-top: 9px; flex-wrap: wrap; }
+        .gfr-range-item { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #999; }
+        .gfr-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+        .gfr-marker {
+            position: absolute; top: -4px; width: 3px; height: 18px;
+            background: #fff; border-radius: 2px;
+            transform: translateX(-50%); transition: left .2s ease;
+            box-shadow: 0 0 7px rgba(255,255,255,.7);
+        }
+
+        /* ── RIGHT COLUMN — RAAS PANEL ── */
+        .raas-panel {
+            background: #10101f; border: 1px solid #1e1e35;
+            border-radius: 14px; padding: 18px 16px;
+        }
+        .raas-title {
+            font-size: 12px; font-weight: 700; color: #ccc;
+            text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px;
+        }
+        .raas-svg-wrap { width: 100%; }
+        #raas-svg { display: block; width: 100%; }
+
+        /* RAAS nodes */
+        .rnode { cursor: default; }
+        .rnode rect, .rnode ellipse {
+            transition: fill .4s, stroke .4s, filter .4s;
+        }
+        .rnode text { transition: fill .4s; pointer-events: none; }
+
+        /* Aldosterone info box */
+        .aldo-box {
+            margin-top: 16px; padding: 12px 14px;
+            background: #1a1428; border: 1px solid #3a2860;
+            border-radius: 10px;
+        }
+        .aldo-title {
+            font-size: 11px; font-weight: 700; color: #c084fc;
+            text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+        }
+        .aldo-effects { display: flex; flex-direction: column; gap: 5px; }
+        .aldo-row { display: flex; align-items: flex-start; gap: 8px; font-size: 11px; color: #aaa; }
+        .aldo-icon { font-size: 13px; flex-shrink: 0; }
+        .aldo-row b { color: #ddd; }
+        .aldo-highlight { color: #c084fc; font-weight: 600; }
+
+        /* ── FOOTER ── */
+        footer {
+            margin-top: 26px; padding-top: 16px;
+            border-top: 1px solid #1e1e35;
+            text-align: center; font-size: 12px; color: #444;
+        }
+        footer a { color: #9d5cf0; text-decoration: none; font-weight: 600; }
+        footer a:hover { color: #b87ff5; }
+
+        @media (max-width: 860px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ── TABS ── */
+        .tabs {
+            display: flex; gap: 4px; margin-bottom: 22px;
+            background: #10101f; border: 1px solid #1e1e35;
+            border-radius: 12px; padding: 5px;
+        }
+        .tab {
+            flex: 1; padding: 11px 16px;
+            background: transparent; border: none;
+            color: #888; font-size: 13px; font-weight: 600;
+            font-family: inherit; cursor: pointer;
+            border-radius: 8px; transition: all .18s ease;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .tab:hover { background: #1a1a30; color: #ddd; }
+        .tab.active {
+            background: linear-gradient(135deg, #2a1840, #1f1235);
+            color: #fff;
+            box-shadow: 0 0 0 1px #5a3a8a inset, 0 2px 8px rgba(124,58,237,.25);
+        }
+        .tab-icon { font-size: 15px; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; animation: fadeIn .2s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+        /* ── TOGGLE SWITCH ── */
+        .toggle-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 0;
+        }
+        .toggle-row label { font-size: 13px; color: #aaa; cursor: pointer; }
+        .toggle-switch {
+            position: relative; display: inline-block;
+            width: 44px; height: 24px; flex-shrink: 0;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; cursor: pointer; inset: 0;
+            background: #2a2a40; border-radius: 24px; transition: .25s;
+        }
+        .toggle-slider::before {
+            position: absolute; content: "";
+            height: 18px; width: 18px; left: 3px; bottom: 3px;
+            background: #888; border-radius: 50%; transition: .25s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: #4a3070; }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: #c084fc; }
+
+        /* ── pH simulator info card ── */
+        .ph-info-card {
+            background: #1a1428; border: 1px solid #3a2860;
+            border-radius: 10px; padding: 13px 14px; margin-bottom: 12px;
+        }
+        .ph-info-card.b-card { background: #14182a; border-color: #2a4060; }
+        .ph-info-title {
+            font-size: 11px; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; margin-bottom: 8px;
+        }
+        .ph-info-card .ph-info-title { color: #c084fc; }
+        .ph-info-card.b-card .ph-info-title { color: #7ec8e3; }
+        .ph-info-row { font-size: 11px; color: #aaa; line-height: 1.6; }
+        .ph-info-row b { color: #ddd; }
+        .ph-info-card.active { box-shadow: 0 0 0 1px currentColor inset, 0 0 12px rgba(192,132,252,.3); }
+        .ph-info-card.b-card.active { box-shadow: 0 0 0 1px #7ec8e3 inset, 0 0 12px rgba(126,200,227,.3); }
+
+        /* ── Scenario buttons ── */
+        .scenario-section {
+            margin-top: 14px; padding: 14px;
+            background: #10101f; border: 1px solid #1e1e35;
+            border-radius: 10px;
+        }
+        .scenario-title {
+            font-size: 11px; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; color: #888; margin-bottom: 10px;
+        }
+        .scenario-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 6px;
+        }
+        .scenario-btn {
+            padding: 9px 11px; background: #1a1a2e; border: 1px solid #2a2a40;
+            color: #ccc; font-size: 11px; font-weight: 600;
+            cursor: pointer; border-radius: 7px; transition: all .15s;
+            font-family: inherit; line-height: 1.35; text-align: left;
+        }
+        .scenario-btn small { display: block; font-size: 9px; color: #777; font-weight: 400; margin-top: 2px; }
+        .scenario-btn:hover { background: #232340; border-color: #3a3a55; color: #fff; }
+        .scenario-btn.s-warn-btn:hover { border-color: #fb8c00; color: #ffb060; }
+        .scenario-btn.s-cool-btn:hover { border-color: #0288d1; color: #7ec8e3; }
+        .scenario-btn.s-norm-btn:hover { border-color: #43a047; color: #6dd47a; }
+        .scenario-btn.active { background: #2a1840; border-color: #5a3a8a; color: #fff; }
+        .scenario-btn.active small { color: #aaa; }
+
+        /* Make moving text not selectable so it doesn't interfere with clicks */
+        #ph-viz text { user-select: none; pointer-events: none; }
+
+        /* ── Slider + number input row ── */
+        .slider-num-row { display: flex; gap: 12px; align-items: center; }
+        .slider-num-row input[type=range] { flex: 1; min-width: 0; }
+        .num-input {
+            width: 78px; padding: 6px 8px;
+            background: #1a1a2e; border: 1px solid #2a2a40;
+            color: #fff; font-family: inherit; font-size: 13px;
+            border-radius: 6px; text-align: center;
+            -moz-appearance: textfield;
+        }
+        .num-input::-webkit-outer-spin-button,
+        .num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .num-input:focus { outline: none; border-color: #5a3a8a; box-shadow: 0 0 0 2px rgba(124,58,237,.2); }
+        .num-unit {
+            font-size: 11px; color: #777; min-width: 56px;
+        }
+
+        /* ── Henderson–Hasselbalch equation panel ── */
+        .hh-equation {
+            margin-top: 14px;
+            padding: 16px 18px;
+            background: linear-gradient(180deg, #10101f, #0e0e1c);
+            border: 1px solid #1e1e35;
+            border-radius: 10px;
+        }
+        .hh-title {
+            font-size: 11px; font-weight: 700; letter-spacing: .06em;
+            text-transform: uppercase; color: #888; margin-bottom: 14px;
+        }
+        .hh-formula-row {
+            font-family: "Courier New", "Consolas", monospace;
+            color: #ddd;
+            display: flex; align-items: center; flex-wrap: wrap;
+            gap: 6px 8px; margin-bottom: 10px; line-height: 1.45;
+            min-height: 38px;          /* stable height even when wrapping */
+            overflow-anchor: none;     /* prevent browser scroll-anchoring jumps */
+        }
+        .hh-formula-row.symbolic { font-size: 15px; }
+        .hh-formula-row.numeric  { font-size: 13px; color: #b0b0b0; min-height: 42px; }
+        .hh-fraction {
+            display: inline-flex; flex-direction: column;
+            text-align: center; vertical-align: middle;
+        }
+        .hh-num { border-bottom: 1.5px solid #666; padding: 0 10px 2px; }
+        .hh-den { padding: 2px 10px 0; }
+        .hh-pka { color: #c084fc; font-weight: bold; }
+        .hh-base { color: #fff; font-weight: bold; }
+        .hh-result {
+            color: #6dd47a; font-weight: bold; font-size: 16px;
+            background: #0e2010; padding: 2px 10px; border-radius: 5px;
+            border: 1px solid #2a4a2a;
+        }
+        .hh-hco-color { color: #7ec8e3; }
+        .hh-pco-color { color: #ffb060; }
+        .hh-arrow { color: #555; font-size: 12px; padding: 0 4px; }
+        .hh-legend {
+            margin-top: 12px; padding-top: 12px;
+            border-top: 1px solid #1e1e35;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 6px 16px; font-size: 11px; color: #888; line-height: 1.5;
+        }
+        .hh-legend b { color: #ddd; }
+        .hh-legend .swatch {
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; margin-right: 5px; vertical-align: middle;
+        }
+
+        /* ── VIEW SYSTEM (homepage + sections) ── */
+        .view { display: none; }
+        .view.active { display: block; animation: viewFade .25s ease; }
+        @keyframes viewFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+        /* ── HOME PAGE ── */
+        .home-hero {
+            text-align: center;
+            padding: 60px 20px 30px;
+        }
+        .home-hero h1 {
+            font-size: 32px; font-weight: 800; margin: 0 0 12px;
+            background: linear-gradient(90deg, #fff, #c084fc, #ff8a8a);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -.02em;
+        }
+        .home-hero p {
+            color: #888; font-size: 14px; margin: 0;
+            max-width: 540px; margin-left: auto; margin-right: auto;
+            line-height: 1.6;
+        }
+        .home-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px;
+            padding: 10px 0 40px;
+        }
+        .home-card {
+            background: linear-gradient(160deg, #14142a, #0e0e1c);
+            border: 1px solid #1e1e35;
+            border-radius: 16px;
+            padding: 26px 22px;
+            text-align: left;
+            cursor: pointer;
+            color: inherit;
+            font-family: inherit;
+            transition: transform .18s ease, border-color .18s ease, background .18s ease;
+            display: flex; flex-direction: column; gap: 8px;
+            position: relative; overflow: hidden;
+        }
+        .home-card::before {
+            content: ""; position: absolute; inset: 0;
+            background: radial-gradient(circle at 100% 0%, rgba(124,58,237,.08), transparent 60%);
+            pointer-events: none;
+        }
+        .home-card:hover {
+            border-color: #5a3a8a;
+            transform: translateY(-3px);
+        }
+        .home-card.disabled { opacity: .55; cursor: not-allowed; }
+        .home-card.disabled:hover { transform: none; border-color: #1e1e35; }
+        .home-card-icon { font-size: 30px; line-height: 1; margin-bottom: 4px; }
+        .home-card-title { font-size: 16px; font-weight: 700; color: #fff; }
+        .home-card-desc { font-size: 12.5px; color: #888; line-height: 1.55; }
+        .home-card-tag {
+            position: absolute; top: 14px; right: 14px;
+            font-size: 9.5px; font-weight: 700; letter-spacing: .08em;
+            text-transform: uppercase;
+            padding: 3px 8px; border-radius: 4px;
+            background: #2a1840; color: #c084fc; border: 1px solid #3a2058;
+        }
+        .home-card-tag.tag-soon { background: #1a1a2a; color: #777; border-color: #2a2a3a; }
+        .home-card-tag.tag-live { background: #0e2010; color: #6dd47a; border-color: #2a4a2a; }
+
+        /* ── HOMEPAGE CREDIT ── */
+        .home-credit {
+            margin: 50px auto 20px;
+            text-align: center;
+            color: #555;
+            font-size: 12.5px;
+            line-height: 1.8;
+        }
+        .home-credit .ornament {
+            color: #3a3a55; letter-spacing: .3em; font-size: 11px; margin-bottom: 14px;
+        }
+        .home-credit .author-line { color: #888; font-size: 13px; }
+        .home-credit a {
+            color: #b87ff5; text-decoration: none; font-weight: 700;
+            border-bottom: 1px dashed #5a3a8a; padding-bottom: 1px;
+        }
+        .home-credit a:hover { color: #d4a8ff; border-bottom-color: #b87ff5; }
+        .home-credit .small { font-size: 11px; color: #555; margin-top: 6px; }
+
+        /* ── BACK BUTTON ── */
+        .back-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 0 14px;
+        }
+        .back-btn {
+            background: #1a1428; color: #c084fc; border: 1px solid #2a1840;
+            padding: 8px 14px; border-radius: 8px; cursor: pointer;
+            font-family: inherit; font-size: 13px; font-weight: 600;
+            display: inline-flex; align-items: center; gap: 6px;
+            transition: all .15s;
+        }
+        .back-btn:hover { background: #2a1840; color: #fff; border-color: #5a3a8a; }
+        .back-bar .crumb {
+            font-size: 11px; color: #555; text-transform: uppercase;
+            letter-spacing: .08em; font-weight: 700;
+        }
+
+        /* ── PLACEHOLDER (under construction pages) ── */
+        .placeholder {
+            text-align: center;
+            padding: 80px 30px;
+            background: linear-gradient(160deg, #14142a, #0e0e1c);
+            border: 1px solid #1e1e35;
+            border-radius: 16px;
+            margin-top: 6px;
+        }
+        .placeholder-icon { font-size: 56px; margin-bottom: 16px; opacity: .5; }
+        .placeholder h2 { color: #fff; font-size: 24px; margin: 0 0 12px; font-weight: 700; }
+        .placeholder p { color: #888; font-size: 14px; line-height: 1.6; margin: 0 auto 8px; max-width: 520px; }
+        .placeholder .badge {
+            display: inline-block; margin-top: 18px;
+            padding: 6px 14px; border-radius: 20px;
+            background: #1a1428; border: 1px solid #2a1840;
+            color: #c084fc; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .08em;
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!--                 HOME VIEW                    -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="view active" id="view-home">
+        <div class="home-hero">
+            <h1>Atlas Fizjologii i Histologii</h1>
+            <p>Zbiór interaktywnych narzędzi do nauki — symulatory dynamiczne, preparaty mikroskopowe i materiały dydaktyczne. Wybierz dział, by przejść dalej.</p>
+        </div>
+
+        <div class="home-grid">
+            <button class="home-card" data-target="sims" type="button">
+                <span class="home-card-tag tag-live">Dostępne</span>
+                <div class="home-card-icon">⚗️</div>
+                <div class="home-card-title">Symulatory interaktywne</div>
+                <div class="home-card-desc">
+                    Ciałko nerkowe (GFR + szlak RAAS) oraz komórki wstawkowe (pH, Henderson–Hasselbalch). Suwaki kliniczne, animacje, scenariusze chorobowe.
+                </div>
+            </button>
+
+            <button class="home-card" data-target="histo" type="button">
+                <span class="home-card-tag tag-soon">Wkrótce</span>
+                <div class="home-card-icon">🔬</div>
+                <div class="home-card-title">Histologia — preparaty mikroskopowe</div>
+                <div class="home-card-desc">
+                    Galeria zdjęć z mikroskopu świetlnego z opisami struktur, barwień (H–E, PAS, Masson) i powiększeń. W przygotowaniu.
+                </div>
+            </button>
+
+            <button class="home-card" data-target="other" type="button">
+                <span class="home-card-tag tag-soon">Wkrótce</span>
+                <div class="home-card-icon">📚</div>
+                <div class="home-card-title">Inne materiały</div>
+                <div class="home-card-desc">
+                    Notatki, schematy, mnemoniki kliniczne i dodatkowe pomoce dydaktyczne. Zawartość pojawi się w kolejnych aktualizacjach.
+                </div>
+            </button>
+        </div>
+
+        <div class="home-credit">
+            <div class="ornament">⸺ ⟡ ⸺</div>
+            <div class="author-line">Autor projektu: <a href="https://www.instagram.com/kive_victor" target="_blank" rel="noopener">@kive_victor</a></div>
+            <div class="small">Instagram · materiały edukacyjne</div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!--             SIMULATORS VIEW                  -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="view" id="view-sims">
+
+    <div class="back-bar">
+        <button class="back-btn" data-target="home" type="button">← Menu główne</button>
+        <span class="crumb">Symulatory interaktywne</span>
+    </div>
+
+    <!-- TAB NAV -->
+    <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="renal" type="button">
+            <span class="tab-icon">🩸</span> Ciałko Nerkowe (GFR)
+        </button>
+        <button class="tab" data-tab="ph" type="button">
+            <span class="tab-icon">⚗️</span> Komórki Wstawkowe (pH)
+        </button>
+    </div>
+
+    <!-- ─── TAB 1: RENAL CORPUSCLE ─── -->
+    <div class="tab-pane active" id="tab-renal">
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="title-section">
+            <h1>Symulator Ciałka Nerkowego</h1>
+            <p>Reguluj parametry hemodynamiczne i obserwuj wpływ szlaku angiotensyny na GFR i gospodarkę wodno-elektrolitową.</p>
+        </div>
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-label">Ciśnienie Kłębuszkowe</div>
+                <div><span id="val-p-glom" class="stat-val">60</span> <span class="stat-unit">mmHg</span></div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">GFR</div>
+                <div><span id="val-gfr" class="stat-val">125</span> <span class="stat-unit">ml/min</span></div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Stan</div>
+                <div id="status-text" class="stat-val s-norma">Norma</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-grid">
+
+        <!-- LEFT: Simulator -->
+        <div class="left-col">
+            <div class="viz-wrapper">
+                <svg id="viz" viewBox="0 0 820 400" preserveAspectRatio="xMidYMid meet"></svg>
+            </div>
+
+            <div class="controls-header">
+                <div class="controls-header-title">Parametry hemodynamiczne</div>
+                <button id="btn-reset" class="reset-btn" type="button" title="Przywróć wartości fizjologiczne">
+                    ⟲ Reset (norma)
+                </button>
+            </div>
+            <div class="controls">
+                <div class="control-group">
+                    <label>Ciśnienie Systemowe (MAP) <span id="label-map">100 mmHg</span></label>
+                    <input type="range" id="input-map" min="60" max="160" value="100">
+                </div>
+                <div class="control-group">
+                    <label>Średnica Tętniczki Doprowadzającej <span id="label-aff">100%</span></label>
+                    <input type="range" id="input-aff" min="50" max="150" value="100">
+                </div>
+                <div class="control-group">
+                    <label>Opór Tętniczki Odprowadzającej (Ang. II) <span id="label-eff">100%</span></label>
+                    <input type="range" id="input-eff" min="100" max="220" value="100">
+                </div>
+                <div class="control-group">
+                    <label>Napięcie Mezangium (Skurcz) <span id="label-mes">0%</span></label>
+                    <input type="range" id="input-mes" min="0" max="80" value="0">
+                </div>
+            </div>
+
+            <div class="gfr-legend">
+                <div class="gfr-legend-title">Skala GFR — zakresy kliniczne (ml/min)</div>
+                <div class="gfr-bar-wrap">
+                    <div class="gfr-seg" style="left:0%;width:20%;background:#c62828;border-radius:5px 0 0 5px;"></div>
+                    <div class="gfr-seg" style="left:20%;width:15%;background:#e53935;"></div>
+                    <div class="gfr-seg" style="left:35%;width:15%;background:#fb8c00;"></div>
+                    <div class="gfr-seg" style="left:50%;width:20%;background:#fdd835;"></div>
+                    <div class="gfr-seg" style="left:70%;width:30%;background:#43a047;border-radius:0 5px 5px 0;"></div>
+                    <div class="gfr-marker" id="gfr-marker" style="left:85%"></div>
+                </div>
+                <div class="gfr-ranges">
+                    <div class="gfr-range-item"><div class="gfr-dot" style="background:#c62828"></div>G5 Niewyd.: &lt;15</div>
+                    <div class="gfr-range-item"><div class="gfr-dot" style="background:#e53935"></div>G4 Ciężka: 15–29</div>
+                    <div class="gfr-range-item"><div class="gfr-dot" style="background:#fb8c00"></div>G3 Umiark.: 30–59</div>
+                    <div class="gfr-range-item"><div class="gfr-dot" style="background:#fdd835"></div>G2 Łagodna: 60–89</div>
+                    <div class="gfr-range-item"><div class="gfr-dot" style="background:#43a047"></div>G1 Norma: 90–125+ ml/min</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: RAAS Panel -->
+        <div class="raas-panel">
+            <div class="raas-title">Szlak Renina–Angiotensyna–Aldosteron (RAAS)</div>
+            <div class="raas-svg-wrap">
+                <svg id="raas-svg" viewBox="0 0 320 560" preserveAspectRatio="xMidYMid meet"></svg>
+            </div>
+
+            <div class="aldo-box">
+                <div class="aldo-title">Aldosteron — efekty</div>
+                <div class="aldo-effects">
+                    <div class="aldo-row"><span class="aldo-icon">🔵</span><div><b>Reabsorpcja Na⁺</b> w cewniku zbiorczym → retencja H₂O → <span class="aldo-highlight">↑ Obj. krwi</span></div></div>
+                    <div class="aldo-row"><span class="aldo-icon">🟡</span><div><b>Wydalanie K⁺ i H⁺</b> → ryzyko hipokaliemii przy przewlekłej aktywacji</div></div>
+                    <div class="aldo-row"><span class="aldo-icon">🔴</span><div><b>↑ Obj. krwi → ↑ MAP</b> → <span class="aldo-highlight">ujemne sprzężenie zwrotne</span> na reninę</div></div>
+                    <div class="aldo-row"><span class="aldo-icon">💊</span><div><b>Spironolakton</b> blokuje receptory aldosteronu (lek moczopędny oszczędzający K⁺)</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div><!-- /tab-renal -->
+
+    <!-- ─── TAB 2: INTERCALATED CELLS / pH ─── -->
+    <div class="tab-pane" id="tab-ph">
+
+        <!-- HEADER -->
+        <div class="header">
+            <div class="title-section">
+                <h1>Regulacja pH: Komórki Wstawkowe</h1>
+                <p>Symulacja sekrecji H⁺ i reabsorpcji HCO₃⁻ przez komórki wstawkowe typu A i B w cewce zbiorczej nerki.</p>
+            </div>
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <div class="stat-label">pH Osocza</div>
+                    <div><span id="val-ph" class="stat-val">7.40</span></div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Status</div>
+                    <div id="ph-status" class="stat-val s-norma">Norma</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Aktywność</div>
+                    <div><span id="ph-activity" class="stat-val">0</span> <span class="stat-unit">%</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-grid">
+
+            <!-- LEFT: pH viz -->
+            <div class="left-col">
+                <div class="viz-wrapper">
+                    <svg id="ph-viz" viewBox="0 0 820 420" preserveAspectRatio="xMidYMid meet"></svg>
+                </div>
+
+                <div class="controls-header">
+                    <div class="controls-header-title">Parametry</div>
+                    <button id="btn-reset-ph" class="reset-btn" type="button" title="Przywróć wartości fizjologiczne">
+                        ⟲ Reset (norma)
+                    </button>
+                </div>
+                <div class="controls">
+                    <div class="control-group">
+                        <label><span class="hh-hco-color">[HCO₃⁻]</span> — wodorowęglany osocza (mmol/L)</label>
+                        <div class="slider-num-row">
+                            <input type="range" id="input-hco3" min="5" max="45" step="0.5" value="24">
+                            <input type="number" id="num-hco3" class="num-input" min="5" max="45" step="0.5" value="24">
+                            <span class="num-unit">mmol/L</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label><span class="hh-pco-color">pCO₂</span> — ciśnienie cząstkowe CO₂ (mmHg)</label>
+                        <div class="slider-num-row">
+                            <input type="range" id="input-pco2" min="15" max="80" step="0.5" value="40">
+                            <input type="number" id="num-pco2" class="num-input" min="15" max="80" step="0.5" value="40">
+                            <span class="num-unit">mmHg</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Szybkość animacji <span id="label-speed">1.0×</span></label>
+                        <input type="range" id="input-speed" min="2" max="25" value="10" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label>Liczba jonów w animacji <span id="label-density">12</span></label>
+                        <input type="range" id="input-density" min="4" max="24" value="12" step="1">
+                    </div>
+                    <div class="toggle-row">
+                        <label for="toggle-ions">Animacja jonów</label>
+                        <span class="toggle-switch">
+                            <input type="checkbox" id="toggle-ions" checked>
+                            <span class="toggle-slider"></span>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Henderson–Hasselbalch live equation -->
+                <div class="hh-equation">
+                    <div class="hh-title">Równanie Hendersona–Hasselbalcha</div>
+
+                    <div class="hh-formula-row symbolic">
+                        <span class="hh-base">pH</span>
+                        <span>=</span>
+                        <span class="hh-pka">pKa</span>
+                        <span>+ log₁₀</span>
+                        <span class="hh-fraction">
+                            <span class="hh-num hh-hco-color">[HCO₃⁻]</span>
+                            <span class="hh-den">0.03 · <span class="hh-pco-color">pCO₂</span></span>
+                        </span>
+                    </div>
+
+                    <div class="hh-formula-row numeric">
+                        <span class="hh-arrow">↳</span>
+                        <span class="hh-pka">6.1</span>
+                        <span>+ log₁₀</span>
+                        <span class="hh-fraction">
+                            <span class="hh-num hh-hco-color" id="hh-hco-val">24.0</span>
+                            <span class="hh-den">0.03 · <span class="hh-pco-color" id="hh-pco-val">40.0</span></span>
+                        </span>
+                        <span>=</span>
+                        <span class="hh-pka">6.1</span>
+                        <span>+ log₁₀</span>
+                        <span class="hh-fraction">
+                            <span class="hh-num hh-hco-color" id="hh-hco-val2">24.0</span>
+                            <span class="hh-den" id="hh-denom-val">1.20</span>
+                        </span>
+                    </div>
+
+                    <div class="hh-formula-row numeric">
+                        <span class="hh-arrow">↳</span>
+                        <span class="hh-pka">6.1</span>
+                        <span>+ log₁₀(<span id="hh-ratio-val">20.00</span>)</span>
+                        <span>=</span>
+                        <span class="hh-pka">6.1</span>
+                        <span>+ <span id="hh-log-val">1.301</span></span>
+                        <span>=</span>
+                        <span class="hh-result" id="hh-result-val">7.40</span>
+                    </div>
+
+                    <div class="hh-legend">
+                        <span><b>pKa</b> = 6.1 — stała dysocjacji kwasu węglowego (H₂CO₃)</span>
+                        <span><span class="swatch" style="background:#7ec8e3"></span><b class="hh-hco-color">[HCO₃⁻]</b> — stężenie wodorowęglanów (norma 22–26 mmol/L)</span>
+                        <span><span class="swatch" style="background:#ffb060"></span><b class="hh-pco-color">pCO₂</b> — ciśnienie cząstkowe CO₂ (norma 35–45 mmHg)</span>
+                        <span><b>0.03</b> — współczynnik rozpuszczalności CO₂ w osoczu</span>
+                    </div>
+                </div>
+
+                <div class="scenario-section">
+                    <div class="scenario-title">Scenariusze kliniczne (ustawia [HCO₃⁻] i pCO₂)</div>
+                    <div class="scenario-grid">
+                        <button class="scenario-btn s-norm-btn" data-hco3="24" data-pco2="40" data-scn="norma" type="button">
+                            ✓ Norma fizjologiczna <small>HCO₃⁻ 24 · pCO₂ 40 → pH 7.40</small>
+                        </button>
+                        <button class="scenario-btn s-warn-btn" data-hco3="12" data-pco2="28" data-scn="km" type="button">
+                            Kwasica metaboliczna <small>cukrzyca / niewyd. nerek · HCO₃⁻ 12 · pCO₂ 28</small>
+                        </button>
+                        <button class="scenario-btn s-warn-btn" data-hco3="30" data-pco2="60" data-scn="ko" type="button">
+                            Kwasica oddechowa <small>POChP / hipowentylacja · HCO₃⁻ 30 · pCO₂ 60</small>
+                        </button>
+                        <button class="scenario-btn s-cool-btn" data-hco3="36" data-pco2="44" data-scn="zm" type="button">
+                            Zasadowica metaboliczna <small>wymioty / diuretyki · HCO₃⁻ 36 · pCO₂ 44</small>
+                        </button>
+                        <button class="scenario-btn s-cool-btn" data-hco3="22" data-pco2="25" data-scn="zo" type="button">
+                            Zasadowica oddechowa <small>hiperwentylacja · HCO₃⁻ 22 · pCO₂ 25</small>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="gfr-legend">
+                    <div class="gfr-legend-title">Skala pH osocza — zakresy kliniczne</div>
+                    <div class="gfr-bar-wrap">
+                        <div class="gfr-seg" style="left:0%;width:25%;background:#c62828;border-radius:5px 0 0 5px;"></div>
+                        <div class="gfr-seg" style="left:25%;width:18%;background:#fb8c00;"></div>
+                        <div class="gfr-seg" style="left:43%;width:14%;background:#43a047;"></div>
+                        <div class="gfr-seg" style="left:57%;width:18%;background:#0288d1;"></div>
+                        <div class="gfr-seg" style="left:75%;width:25%;background:#5e35b1;border-radius:0 5px 5px 0;"></div>
+                        <div class="gfr-marker" id="ph-marker" style="left:50%"></div>
+                    </div>
+                    <div class="gfr-ranges">
+                        <div class="gfr-range-item"><div class="gfr-dot" style="background:#c62828"></div>Ciężka kwasica: &lt;7.20</div>
+                        <div class="gfr-range-item"><div class="gfr-dot" style="background:#fb8c00"></div>Kwasica: 7.20–7.34</div>
+                        <div class="gfr-range-item"><div class="gfr-dot" style="background:#43a047"></div>Norma: 7.35–7.45</div>
+                        <div class="gfr-range-item"><div class="gfr-dot" style="background:#0288d1"></div>Zasadowica: 7.46–7.60</div>
+                        <div class="gfr-range-item"><div class="gfr-dot" style="background:#5e35b1"></div>Ciężka zasadowica: &gt;7.60</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Cell types panel -->
+            <div class="raas-panel">
+                <div class="raas-title">Typy komórek wstawkowych</div>
+
+                <div class="ph-info-card" id="card-type-a">
+                    <div class="ph-info-title">⬇ Typ A — odpowiedź na kwasicę</div>
+                    <div class="ph-info-row">
+                        <b>Aktywne przy ↓ pH</b><br>
+                        • Sekrecja <b style="color:#ff8a8a">H⁺</b> do światła cewki (H⁺-ATPaza, H⁺/K⁺-ATPaza)<br>
+                        • Reabsorpcja <b style="color:#7ec8e3">HCO₃⁻</b> do krwi (wymiennik HCO₃⁻/Cl⁻)<br>
+                        • <b>Efekt:</b> alkalizacja krwi, zakwaszenie moczu
+                    </div>
+                </div>
+
+                <div class="ph-info-card b-card" id="card-type-b">
+                    <div class="ph-info-title">⬆ Typ B — odpowiedź na zasadowicę</div>
+                    <div class="ph-info-row">
+                        <b>Aktywne przy ↑ pH</b><br>
+                        • Sekrecja <b style="color:#7ec8e3">HCO₃⁻</b> do światła cewki (pendryna)<br>
+                        • Reabsorpcja <b style="color:#ff8a8a">H⁺</b> do krwi<br>
+                        • <b>Efekt:</b> zakwaszenie krwi, alkalizacja moczu
+                    </div>
+                </div>
+
+                <div class="ph-info-card" style="background:#181828;border-color:#303048;">
+                    <div class="ph-info-title" style="color:#aaa">Bufory ustrojowe</div>
+                    <div class="ph-info-row">
+                        • <b>Wodorowęglanowy</b> (HCO₃⁻/H₂CO₃) — główny w osoczu<br>
+                        • <b>Fosforanowy</b> (HPO₄²⁻/H₂PO₄⁻) — w moczu i wewnątrzkomórkowo<br>
+                        • <b>Białkowy</b> — hemoglobina, albuminy<br>
+                        • <b>Płuca:</b> CO₂; <b>Nerki:</b> HCO₃⁻ i H⁺ (24–48 h)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div><!-- /tab-ph -->
+
+    </div><!-- /view-sims -->
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!--             HISTOLOGY VIEW                   -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="view" id="view-histo">
+        <div class="back-bar">
+            <button class="back-btn" data-target="home" type="button">← Menu główne</button>
+            <span class="crumb">Histologia — preparaty mikroskopowe</span>
+        </div>
+        <div class="placeholder">
+            <div class="placeholder-icon">🔬</div>
+            <h2>Strona w budowie</h2>
+            <p>Tutaj pojawi się galeria preparatów histologicznych z mikroskopu świetlnego — z opisami struktur, technik barwienia (H&amp;E, PAS, Masson, srebrzenie) oraz powiększeń obiektywu.</p>
+            <p>Sekcja jest przygotowywana — wróć wkrótce.</p>
+            <span class="badge">W przygotowaniu</span>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!--               OTHER VIEW                     -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="view" id="view-other">
+        <div class="back-bar">
+            <button class="back-btn" data-target="home" type="button">← Menu główne</button>
+            <span class="crumb">Inne materiały</span>
+        </div>
+        <div class="placeholder">
+            <div class="placeholder-icon">📚</div>
+            <h2>Strona w budowie</h2>
+            <p>W tej sekcji pojawią się dodatkowe materiały dydaktyczne — notatki, mnemoniki kliniczne, schematy szlaków biochemicznych i inne pomoce do nauki.</p>
+            <p>Zawartość będzie dodawana sukcesywnie w kolejnych aktualizacjach.</p>
+            <span class="badge">Wkrótce</span>
+        </div>
+    </div>
+
+</div>
+
+<footer id="page-footer">
+    Autor: <a href="https://www.instagram.com/kive_victor" target="_blank">@kive_victor</a> &nbsp;·&nbsp; Atlas Fizjologii i Histologii
+</footer>
+
+<script>
+// ─────────────────────────────────────────────
+//  PHYSIOLOGY CONSTANTS
+// ─────────────────────────────────────────────
+const P_bowman = 15, P_oncotic = 25, K_base = 6.25;
+
+// ─────────────────────────────────────────────
+//  GFR SCALE HELPER
+// ─────────────────────────────────────────────
+function gfrToBarPct(gfr) {
+    if (gfr <= 0)  return 0;
+    if (gfr < 15)  return (gfr / 15) * 20;
+    if (gfr < 30)  return 20 + ((gfr - 15) / 15) * 15;
+    if (gfr < 60)  return 35 + ((gfr - 30) / 30) * 15;
+    if (gfr < 90)  return 50 + ((gfr - 60) / 30) * 20;
+    return Math.min(99, 70 + ((gfr - 90) / 50) * 29);
+}
+
+// ─────────────────────────────────────────────
+//  RAAS SVG
+// ─────────────────────────────────────────────
+const rsvg = d3.select("#raas-svg");
+const RW = 320, RH = 560;
+
+const NODES = [
+    { id:"trigger", x:160, y:32,  w:200, h:30, label:"↓ MAP / ↓ GFR", sub:"Bodziec aktywujący", shape:"rect", color:"#1e3a5f", activeColor:"#1565c0" },
+    { id:"jg",      x:160, y:90,  w:170, h:30, label:"Komórki JG (nerkowe)",  sub:"Wykrywają ↓ ciśnienia", shape:"rect", color:"#1e3a5f", activeColor:"#1565c0" },
+    { id:"renin",   x:160, y:148, w:140, h:30, label:"Renina", sub:"Enzym proteolityczny", shape:"pill", color:"#4a1a6a", activeColor:"#7b2dbc" },
+    { id:"angI",    x:160, y:206, w:190, h:30, label:"Angiotensynogen → Ang. I", sub:"Wątroba (substrat)", shape:"rect", color:"#1e3a5f", activeColor:"#0d6e8a" },
+    { id:"ace",     x:160, y:264, w:200, h:30, label:"ACE → Angiotensyna II", sub:"Płuca (konwersja)", shape:"pill", color:"#4a1a6a", activeColor:"#7b2dbc" },
+    { id:"eff",     x:80,  y:340, w:145, h:44, label:"Skurcz tętniczki\nodprowadzającej", sub:"↑ pGlom → ↑ GFR", shape:"rect", color:"#1a3820", activeColor:"#1b5e20" },
+    { id:"aldo_s",  x:248, y:340, w:130, h:44, label:"Kora nadnerczy\n→ Aldosteron", sub:"Hormon steroidowy", shape:"rect", color:"#3a2000", activeColor:"#e65100" },
+    { id:"aldo_e",  x:248, y:432, w:130, h:44, label:"Cewnik zbiorczy\nNa⁺/H₂O retencja", sub:"↑ Obj. krwi → ↑ MAP", shape:"rect", color:"#3a2000", activeColor:"#e65100" },
+    { id:"fb",      x:160, y:516, w:200, h:30, label:"↑ MAP → Hamuje reninę", sub:"Ujemne sprzężenie zwrotne", shape:"pill", color:"#1a2a1a", activeColor:"#2e7d32" },
+];
+
+const EDGES = [
+    { from:"trigger", to:"jg"    },
+    { from:"jg",      to:"renin" },
+    { from:"renin",   to:"angI"  },
+    { from:"angI",    to:"ace"   },
+    { from:"ace",     to:"eff"   },
+    { from:"ace",     to:"aldo_s"},
+    { from:"aldo_s",  to:"aldo_e"},
+    { from:"aldo_e",  to:"fb"    },
+];
+
+// Map node id → DOM g element for updates
+const nodeEls = {};
+
+function buildRaas() {
+    rsvg.selectAll("*").remove();
+
+    // Draw arrows first
+    const nodeMap = {};
+    NODES.forEach(n => nodeMap[n.id] = n);
+
+    const arrowId = "arrow-head";
+    rsvg.append("defs").append("marker")
+        .attr("id", arrowId)
+        .attr("markerWidth", 8).attr("markerHeight", 8)
+        .attr("refX", 6).attr("refY", 3)
+        .attr("orient", "auto")
+        .append("path")
+        .attr("d", "M0,0 L0,6 L8,3 Z")
+        .attr("fill", "#444");
+
+    EDGES.forEach(e => {
+        const s = nodeMap[e.from], t = nodeMap[e.to];
+        const x1 = s.x, y1 = s.y + s.h / 2;
+        const x2 = t.x, y2 = t.y - t.h / 2;
+        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+
+        rsvg.append("line")
+            .attr("id", `edge-${e.from}-${e.to}`)
+            .attr("x1", x1).attr("y1", y1)
+            .attr("x2", x2).attr("y2", y2 - 4)
+            .attr("stroke", "#333").attr("stroke-width", 2)
+            .attr("marker-end", `url(#${arrowId})`)
+            .style("transition", "stroke .4s");
+    });
+
+    // Draw nodes
+    NODES.forEach(n => {
+        const g = rsvg.append("g")
+            .attr("class", "rnode")
+            .attr("id", `rnode-${n.id}`)
+            .attr("transform", `translate(${n.x}, ${n.y})`);
+
+        nodeEls[n.id] = g;
+
+        const rx = n.shape === "pill" ? n.h / 2 : 7;
+        g.append("rect")
+            .attr("x", -n.w / 2).attr("y", -n.h / 2)
+            .attr("width", n.w).attr("height", n.h)
+            .attr("rx", rx).attr("fill", n.color)
+            .attr("stroke", "#333").attr("stroke-width", 1.2);
+
+        const lines = n.label.split("\n");
+        if (lines.length === 1) {
+            g.append("text")
+                .attr("y", -1).attr("text-anchor", "middle")
+                .attr("dominant-baseline", "middle")
+                .attr("font-size", "11px").attr("font-weight", "700")
+                .attr("fill", "#ccc").text(n.label);
+        } else {
+            lines.forEach((ln, i) => {
+                g.append("text")
+                    .attr("y", (i - (lines.length - 1) / 2) * 13 - 2)
+                    .attr("text-anchor", "middle")
+                    .attr("dominant-baseline", "middle")
+                    .attr("font-size", "10px").attr("font-weight", "700")
+                    .attr("fill", "#ccc").text(ln);
+            });
+        }
+
+        if (n.sub) {
+            g.append("text")
+                .attr("y", n.h / 2 - 4)
+                .attr("text-anchor", "middle")
+                .attr("dominant-baseline", "auto")
+                .attr("font-size", "8px")
+                .attr("fill", "#777").text(n.sub);
+        }
+    });
+}
+
+function updateRaas(map, effPct, gfr) {
+    const lowMap  = map < 85;
+    const effConstr = effPct > 115;
+    const raasActive = lowMap || effConstr;
+
+    const nodeMap = {};
+    NODES.forEach(n => nodeMap[n.id] = n);
+
+    function setNode(id, active) {
+        const g = nodeEls[id];
+        if (!g) return;
+        const n = nodeMap[id];
+        g.select("rect")
+            .attr("fill", active ? n.activeColor : n.color)
+            .attr("stroke", active ? "#aaa" : "#333")
+            .attr("filter", active ? "drop-shadow(0 0 5px rgba(255,255,255,.25))" : "none");
+        g.selectAll("text").attr("fill", active ? "#fff" : "#999");
+    }
+
+    function setEdge(from, to, active) {
+        rsvg.select(`#edge-${from}-${to}`)
+            .attr("stroke", active ? "#7ec8e3" : "#333")
+            .attr("stroke-width", active ? 2.5 : 2);
+    }
+
+    // Core RAAS pathway: active when MAP is low
+    setNode("trigger", lowMap);
+    setNode("jg",      lowMap);
+    setNode("renin",   lowMap);
+    setNode("angI",    lowMap);
+    setNode("ace",     lowMap || effConstr);
+
+    setEdge("trigger","jg",     lowMap);
+    setEdge("jg",     "renin",  lowMap);
+    setEdge("renin",  "angI",   lowMap);
+    setEdge("angI",   "ace",    lowMap);
+
+    // Efferent branch: active when efferent is constricted
+    setNode("eff",    effConstr);
+    setEdge("ace",    "eff",    effConstr);
+
+    // Aldosterone branch: active when RAAS triggered
+    setNode("aldo_s", raasActive);
+    setNode("aldo_e", raasActive);
+    setNode("fb",     raasActive);
+    setEdge("ace",    "aldo_s", raasActive);
+    setEdge("aldo_s", "aldo_e", raasActive);
+    setEdge("aldo_e", "fb",     raasActive);
+}
+
+// ─────────────────────────────────────────────
+//  MAIN SIMULATOR SVG
+// ─────────────────────────────────────────────
+const svg = d3.select("#viz");
+
+function pillLabel(g, x, y, text, opts = {}) {
+    const fs = opts.fs || 10;
+    const pad = opts.pad || 14;
+    const tlen = text.length * (fs * 0.62) + pad * 2;
+    const h = opts.h || 22;
+    g.append("rect")
+        .attr("x", x - tlen / 2).attr("y", y - h / 2)
+        .attr("width", tlen).attr("height", h).attr("rx", h / 2)
+        .attr("fill", opts.fill || "#16162a")
+        .attr("stroke", opts.stroke || "#40405a").attr("stroke-width", 1);
+    g.append("text")
+        .attr("x", x).attr("y", y + 0.5)
+        .attr("text-anchor", "middle").attr("dominant-baseline", "middle")
+        .attr("font-size", fs + "px").attr("font-weight", "bold")
+        .attr("fill", opts.color || "#ddd").text(text);
+}
+
+function draw(aff, eff, mes, gfr) {
+    svg.selectAll("*").remove();
+
+    const cx = 460, cy = 200;
+    const bowmanR = 165;
+    const podR    = 128 * (1 - mes * 0.12);
+    const mezR    = 68  * (1 - mes * 0.35);
+    const affW    = Math.max(8, 24 * aff);
+    const effW    = Math.max(6, 14 * (2 - eff));  // narrows with Ang II
+
+    // Bowman fill
+    svg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", bowmanR).attr("fill", "#14142a");
+
+    // Podocyte petals
+    const pg = svg.append("g");
+    for (let l = 0; l < 5; l++) {
+        const r = podR * (0.55 + l * 0.095);
+        const nP = 18 + l * 4, alpha = 0.18 + l * 0.13;
+        for (let i = 0; i < nP; i++) {
+            const a0 = (i / nP) * Math.PI * 2;
+            const a1 = ((i + .5) / nP) * Math.PI * 2;
+            const a2 = ((i + 1) / nP) * Math.PI * 2;
+            const inn = r * 0.78;
+            pg.append("path")
+                .attr("d", `M${cx + Math.cos(a0)*inn} ${cy + Math.sin(a0)*inn} Q${cx + Math.cos(a1)*r*1.08} ${cy + Math.sin(a1)*r*1.08} ${cx + Math.cos(a2)*inn} ${cy + Math.sin(a2)*inn}Z`)
+                .attr("fill", `rgba(220,110,140,${alpha})`).attr("stroke", "rgba(200,80,110,.3)").attr("stroke-width", .5);
+        }
+    }
+    svg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", podR).attr("fill","none").attr("stroke","#e06080").attr("stroke-width",2.5).attr("opacity",.8);
+    svg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", podR * .82).attr("fill","rgba(200,100,130,.18)").attr("stroke","#c05070").attr("stroke-width",1).attr("opacity",.6);
+
+    // Mezangium
+    ["#b04868","#c05878","#d06888","#c05070"].forEach((c,i) => {
+        svg.append("circle").attr("cx",cx).attr("cy",cy).attr("r", mezR*(1-i*.18)).attr("fill",c).attr("opacity",.55+i*.08);
+    });
+    for (let r = mezR*.2; r < mezR; r += mezR*.22)
+        svg.append("circle").attr("cx",cx).attr("cy",cy).attr("r",r).attr("fill","none").attr("stroke","#e888a0").attr("stroke-width",1).attr("opacity",.35);
+    svg.append("circle").attr("cx",cx).attr("cy",cy).attr("r",mezR).attr("fill","none").attr("stroke","#d06880").attr("stroke-width",2);
+
+    svg.append("text").attr("x",cx).attr("y",cy-8).attr("text-anchor","middle").attr("dominant-baseline","middle").attr("font-size","11px").attr("font-weight","bold").attr("fill","#fff").text("MEZANGIUM");
+    svg.append("text").attr("x",cx).attr("y",cy+8).attr("text-anchor","middle").attr("dominant-baseline","middle").attr("font-size","9px").attr("fill","#ffbbcc").text("Kontrola powierzchni");
+    svg.append("text").attr("x",cx).attr("y",cy-mezR-18).attr("text-anchor","middle").attr("dominant-baseline","middle").attr("font-size","11px").attr("font-weight","bold").attr("fill","#fff").text("PODOCYTY");
+    svg.append("text").attr("x",cx).attr("y",cy-mezR-5).attr("text-anchor","middle").attr("dominant-baseline","middle").attr("font-size","9px").attr("fill","#ffbbcc").text("Bariera mechaniczna");
+
+    // Bowman capsule
+    svg.append("circle").attr("cx",cx).attr("cy",cy).attr("r",bowmanR).attr("fill","none").attr("stroke","#5a5a80").attr("stroke-width",6);
+
+    const labG = svg.append("g");
+    pillLabel(labG, cx + bowmanR - 18, cy - bowmanR + 26, "TOREBKA BOWMANA");
+
+    // Afferent arteriole
+    const affY = cy - 55, affX1 = 30, affX2 = cx - bowmanR + 10;
+    svg.append("rect").attr("x",affX1).attr("y",affY-affW/2).attr("width",affX2-affX1).attr("height",affW).attr("fill","#2a1020").attr("rx",4).attr("stroke","#5a2030").attr("stroke-width",1);
+    pillLabel(labG, 140, affY - affW/2 - 16, "TĘTNICZKA DOPROWADZAJĄCA");
+
+    // JG Cell
+    const jgX = cx - bowmanR - 12, jgY = cy - 55, jgR = 40;
+    svg.append("circle").attr("cx",jgX).attr("cy",jgY).attr("r",jgR+7).attr("fill","rgba(124,58,237,.2)");
+    svg.append("circle").attr("cx",jgX).attr("cy",jgY).attr("r",jgR).attr("fill","#7c3aed").attr("stroke","#9d5cf0").attr("stroke-width",2);
+    svg.append("circle").attr("cx",jgX-12).attr("cy",jgY-12).attr("r",13).attr("fill","rgba(180,140,255,.18)");
+    pillLabel(labG, jgX+10, jgY-jgR-16, "KOMÓRKI JG");
+
+    // Efferent arteriole — color shifts with Ang. II constriction
+    const effY = cy + 65, effX1 = 30, effX2 = cx - bowmanR + 10;
+    const effActive = eff > 1.15;
+    svg.append("rect").attr("x",effX1).attr("y",effY-effW/2).attr("width",effX2-effX1).attr("height",effW)
+        .attr("fill", effActive ? "#1a2840" : "#101030").attr("rx",4)
+        .attr("stroke", effActive ? "#4060a0" : "#304060").attr("stroke-width", effActive ? 1.5 : 1);
+    pillLabel(labG, 140, effY + Math.max(effW,7)/2 + 16, "TĘTNICZKA ODPROWADZAJĄCA",
+        { color: effActive ? "#88aaff" : "#ddd", stroke: effActive ? "#4060a0" : "#40405a" });
+
+    // Ang II badge on efferent if active
+    if (effActive) {
+        pillLabel(labG, effX2 - 20, effY, "Ang. II ↑", { fill:"#1a2840", stroke:"#4488cc", color:"#88ccff", fs:9, h:18 });
+    }
+
+    // Animated blood — afferent
+    const nBlood = Math.max(3, Math.round(7 * aff));
+    for (let i = 0; i < nBlood; i++) {
+        const p = svg.append("circle").attr("r",3.5).attr("fill","#ff7070").attr("opacity",0);
+        const delay = (i / nBlood) * 900;
+        (function anim() {
+            const py = affY + (Math.random()-.5) * (affW*.5);
+            p.attr("cx",affX1+10).attr("cy",py).attr("opacity",.9)
+                .transition().delay(delay).duration(700+Math.random()*400).ease(d3.easeLinear)
+                .attr("cx",affX2-8).attr("opacity",.4).on("end",anim);
+        })();
+    }
+
+    // Animated filtrate — golden
+    if (gfr > 0) {
+        const nFilt = Math.min(30, Math.floor(gfr / 5));
+        for (let i = 0; i < nFilt; i++) {
+            const p = svg.append("circle").attr("r",2.5).attr("fill","#f5c542").attr("opacity",0);
+            (function animFilt() {
+                const angle = Math.random() * Math.PI * 2;
+                const endAngle = angle + (Math.random()-.5)*.5;
+                p.attr("cx",cx+Math.cos(angle)*(podR+4)).attr("cy",cy+Math.sin(angle)*(podR+4)).attr("opacity",.9)
+                    .transition().duration(1000+Math.random()*900).ease(d3.easeQuadOut)
+                    .attr("cx",cx+Math.cos(endAngle)*(bowmanR-8)).attr("cy",cy+Math.sin(endAngle)*(bowmanR-8))
+                    .attr("opacity",0).on("end",animFilt);
+            })();
+        }
+    }
+
+    // Animated blood — efferent (slower/fewer if constricted)
+    const nEff = effActive ? 3 : 5;
+    const effDur = effActive ? 1400 : 900;
+    for (let i = 0; i < nEff; i++) {
+        const p = svg.append("circle").attr("r",3).attr("fill","#6688ff").attr("opacity",0);
+        const delay = (i/nEff)*900;
+        (function animEff() {
+            const py = effY + (Math.random()-.5)*(effW*.5);
+            p.attr("cx",effX2-8).attr("cy",py).attr("opacity",.75)
+                .transition().delay(delay).duration(effDur+Math.random()*500).ease(d3.easeLinear)
+                .attr("cx",effX1+10).attr("opacity",.2).on("end",animEff);
+        })();
+    }
+}
+
+// ─────────────────────────────────────────────
+//  UPDATE LOOP
+// ─────────────────────────────────────────────
+function update() {
+    const map = +document.getElementById("input-map").value;
+    const aff = +document.getElementById("input-aff").value / 100;
+    const eff = +document.getElementById("input-eff").value / 100;  // 1.0–2.2
+    const mes = +document.getElementById("input-mes").value / 100;
+
+    // Efferent constriction raises glomerular pressure (Ang II effect)
+    const pGlom = (map * 0.6) * aff * (1 + (eff - 1) * 0.35);
+    const K = K_base * (1 - mes);
+    let gfr = K * (pGlom - P_bowman - P_oncotic);
+    gfr = Math.max(0, gfr);
+
+    document.getElementById("val-p-glom").innerText = pGlom.toFixed(1);
+    document.getElementById("val-gfr").innerText = gfr.toFixed(1);
+    document.getElementById("label-map").innerText = map + " mmHg";
+    document.getElementById("label-aff").innerText = Math.round(aff * 100) + "%";
+    document.getElementById("label-eff").innerText = Math.round(eff * 100) + "%";
+    document.getElementById("label-mes").innerText = Math.round(mes * 100) + "%";
+
+    const st = document.getElementById("status-text");
+    if (gfr > 90)      { st.className = "stat-val s-norma"; st.innerText = "Norma"; }
+    else if (gfr > 60) { st.className = "stat-val s-warn";  st.innerText = "Spadek"; }
+    else               { st.className = "stat-val s-crit";  st.innerText = "Niewydolność"; }
+
+    document.getElementById("gfr-marker").style.left = gfrToBarPct(gfr) + "%";
+
+    draw(aff, eff, mes, gfr);
+    updateRaas(map, Math.round(eff * 100), gfr);
+}
+
+// Default physiological values
+const DEFAULTS = { map: 100, aff: 100, eff: 100, mes: 0 };
+
+function resetToDefaults() {
+    document.getElementById("input-map").value = DEFAULTS.map;
+    document.getElementById("input-aff").value = DEFAULTS.aff;
+    document.getElementById("input-eff").value = DEFAULTS.eff;
+    document.getElementById("input-mes").value = DEFAULTS.mes;
+    update();
+}
+
+// Build RAAS once, then update reactively
+buildRaas();
+document.querySelectorAll("#tab-renal input").forEach(i => i.addEventListener("input", update));
+document.getElementById("btn-reset").addEventListener("click", resetToDefaults);
+update();
+
+// ─────────────────────────────────────────────
+//  TAB SWITCHING
+// ─────────────────────────────────────────────
+document.querySelectorAll(".tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const target = btn.dataset.tab;
+        document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b === btn));
+        document.querySelectorAll(".tab-pane").forEach(p => p.classList.toggle("active", p.id === `tab-${target}`));
+    });
+});
+
+// ═════════════════════════════════════════════
+//   pH SIMULATOR — Komórki Wstawkowe
+// ═════════════════════════════════════════════
+const phSvg = d3.select("#ph-viz");
+const PHW = 820, PHH = 420;
+
+function phToBarPct(ph) {
+    // Map pH 7.00–7.80 to 0–100%
+    return Math.max(0, Math.min(100, ((ph - 7.00) / 0.80) * 100));
+}
+
+function phStatus(ph) {
+    if (ph < 7.20)  return { label: "Ciężka kwasica", cls: "s-crit" };
+    if (ph < 7.35)  return { label: "Kwasica",        cls: "s-warn" };
+    if (ph <= 7.45) return { label: "Norma",          cls: "s-norma" };
+    if (ph <= 7.60) return { label: "Zasadowica",     cls: "s-warn" };
+    return            { label: "Ciężka zasadowica",  cls: "s-crit" };
+}
+
+const PH_HCO3_DEFAULT = 24, PH_PCO2_DEFAULT = 40;
+let phDrawGen = 0;   // increments each drawPh; old animation loops self-cancel
+
+function drawPh() {
+    const myGen = ++phDrawGen;
+    const hco3 = +document.getElementById("input-hco3").value;
+    const pco2 = +document.getElementById("input-pco2").value;
+    const showIons = document.getElementById("toggle-ions").checked;
+
+    // ── Henderson–Hasselbalch ──
+    // pH = pKa + log10([HCO3-] / (0.03 × pCO2))
+    const pKa = 6.1;
+    const sol = 0.03;
+    const denom = sol * pco2;
+    const ratio = hco3 / denom;
+    const logRatio = Math.log10(ratio);
+    const ph = pKa + logRatio;
+
+    // Sync paired number inputs (in case the slider was the source of change)
+    document.getElementById("num-hco3").value = hco3.toFixed(1);
+    document.getElementById("num-pco2").value = pco2.toFixed(1);
+
+    // Update equation panel live
+    document.getElementById("hh-hco-val").innerText  = hco3.toFixed(1);
+    document.getElementById("hh-hco-val2").innerText = hco3.toFixed(1);
+    document.getElementById("hh-pco-val").innerText  = pco2.toFixed(1);
+    document.getElementById("hh-denom-val").innerText = denom.toFixed(2);
+    document.getElementById("hh-ratio-val").innerText = ratio.toFixed(2);
+    document.getElementById("hh-log-val").innerText   = logRatio.toFixed(3);
+    document.getElementById("hh-result-val").innerText = ph.toFixed(2);
+
+    // Activity: 0 at pH 7.40, scales with deviation
+    const dev = Math.abs(ph - 7.40);
+    const activity = Math.min(100, dev * 250);
+
+    // Direction: acidosis → Type A (H+ down, HCO3- up); alkalosis → Type B (reversed)
+    const isAcidosis  = ph < 7.35;
+    const isAlkalosis = ph > 7.45;
+    const isNormal    = !isAcidosis && !isAlkalosis;
+
+    // Update top stats
+    document.getElementById("val-ph").innerText = ph.toFixed(2);
+    document.getElementById("ph-activity").innerText = Math.round(activity);
+    const st = phStatus(ph);
+    const sEl = document.getElementById("ph-status");
+    sEl.className = "stat-val " + st.cls;
+    sEl.innerText = st.label;
+
+    document.getElementById("ph-marker").style.left = phToBarPct(ph) + "%";
+
+    // Highlight the active card
+    document.getElementById("card-type-a").classList.toggle("active", isAcidosis);
+    document.getElementById("card-type-b").classList.toggle("active", isAlkalosis);
+
+    // Render diagram
+    phSvg.selectAll("*").remove();
+
+    // Three horizontal bands
+    const bloodTop = 20, bloodBot = 130;
+    const cellTop  = 145, cellBot = 275;
+    const urineTop = 290, urineBot = 400;
+
+    // Blood band
+    phSvg.append("rect").attr("x", 14).attr("y", bloodTop)
+        .attr("width", PHW - 28).attr("height", bloodBot - bloodTop)
+        .attr("fill", "#0d1a2a").attr("rx", 10);
+
+    // Cell membrane band
+    phSvg.append("rect").attr("x", 14).attr("y", cellTop)
+        .attr("width", PHW - 28).attr("height", cellBot - cellTop)
+        .attr("fill", "#0a0a14").attr("rx", 10);
+
+    // Cell capsule
+    const cellX = 200, cellY = cellTop + 20;
+    const cellW = 420, cellH = (cellBot - cellTop) - 40;
+    phSvg.append("rect")
+        .attr("x", cellX).attr("y", cellY)
+        .attr("width", cellW).attr("height", cellH)
+        .attr("rx", 18).attr("fill", "transparent")
+        .attr("stroke", "#666").attr("stroke-width", 2);
+
+    // Urine band
+    phSvg.append("rect").attr("x", 14).attr("y", urineTop)
+        .attr("width", PHW - 28).attr("height", urineBot - urineTop)
+        .attr("fill", "#1a1108").attr("rx", 10);
+
+    // ── Labels (pill badges) ──
+    function pill(x, y, text, fill, stroke, color) {
+        const tlen = text.length * 6.5 + 28;
+        const g = phSvg.append("g");
+        g.append("rect").attr("x", x).attr("y", y - 13)
+            .attr("width", tlen).attr("height", 26).attr("rx", 13)
+            .attr("fill", fill).attr("stroke", stroke).attr("stroke-width", 1.5);
+        g.append("text").attr("x", x + tlen / 2).attr("y", y + 1)
+            .attr("text-anchor", "middle").attr("dominant-baseline", "middle")
+            .attr("font-size", "10px").attr("font-weight", "bold")
+            .attr("fill", color).text(text);
+        return { x, y, w: tlen };
+    }
+
+    // Blood label with droplet
+    pill(40, bloodTop + 35, "🩸  KREW (OSOCZE)", "#0d1a2a", "#d06880", "#e8bbcc");
+    // Cell label inside cell
+    const cellLabelText = isAlkalosis ? "KOMÓRKA WSTAWKOWA TYP B" : "KOMÓRKA WSTAWKOWA TYP A";
+    pill(cellX + 90, cellY + cellH / 2, cellLabelText, "#0a0a14", "#888", "#fff");
+    // Urine label with droplet
+    pill(40, urineBot - 35, "💧  ŚWIATŁO CEWKI (MOCZ)", "#1a1108", "#d4a040", "#f0d090");
+
+    // ── Read animation parameters ──
+    const speedRaw = +document.getElementById("input-speed").value;   // 2–25
+    const density  = +document.getElementById("input-density").value; // 4–24
+    document.getElementById("label-speed").innerText = (speedRaw / 10).toFixed(1) + "×";
+    document.getElementById("label-density").innerText = density;
+
+    // ── Animated ion text labels (only visible when animation is on AND pH is abnormal) ──
+    if (showIons && !isNormal) {
+        const speedMul = speedRaw / 10;            // ~0.2× – 2.5×
+        const baseDur  = Math.max(400, 1800 / speedMul);
+        const rx = (a, b) => a + Math.random() * (b - a);
+        const ION_FONT = "11px";
+
+        const nTravelers = Math.max(2, Math.round(density * activity / 100 * 0.9) + 1);
+
+        const yBlood   = () => rx(bloodTop + 25, bloodBot - 15);
+        const yUrine   = () => rx(urineTop + 25, urineBot - 15);
+        const yCellTop = () => rx(cellY + 18, cellY + 35);
+        const yCellBot = () => rx(cellY + cellH - 35, cellY + cellH - 18);
+
+        // Type A (acidosis): HCO3- cell→blood (UP),  H+ cell→urine (DOWN)
+        // Type B (alkalosis): HCO3- cell→urine (DOWN), H+ cell→blood (UP)
+        const hcoFromY = isAcidosis ? yCellTop : yCellBot;
+        const hcoToY   = isAcidosis ? yBlood   : yUrine;
+        const hFromY   = isAcidosis ? yCellBot : yCellTop;
+        const hToY     = isAcidosis ? yUrine   : yBlood;
+
+        function makeTraveler(text, color, fromY, toY, initDelay) {
+            const lbl = phSvg.append("text")
+                .attr("class", "ion-traveler")
+                .attr("font-size", ION_FONT).attr("fill", color)
+                .attr("font-weight", "bold").attr("opacity", 0)
+                .text(text);
+            function loop() {
+                // Self-cancel if drawPh has been re-run since this loop was scheduled
+                if (myGen !== phDrawGen) { lbl.interrupt(); lbl.remove(); return; }
+                const x = rx(200, 620);
+                const y0 = fromY(), y1 = toY();
+                const dur = baseDur * (0.85 + Math.random() * 0.3);
+                lbl.attr("x", x).attr("y", y0).attr("opacity", 0)
+                    .transition().duration(220).attr("opacity", 0.95)
+                    .transition().duration(dur).ease(d3.easeQuadInOut).attr("y", y1)
+                    .transition().duration(280).attr("opacity", 0)
+                    .on("end", loop);
+            }
+            setTimeout(loop, initDelay);
+        }
+
+        const stagger = baseDur / Math.max(2, nTravelers);
+        for (let i = 0; i < nTravelers; i++) {
+            makeTraveler("HCO₃⁻", "#7ec8e3", hcoFromY, hcoToY, i * stagger);
+            makeTraveler("H⁺",    "#ff8a8a", hFromY,   hToY,   i * stagger + stagger / 2);
+        }
+    }
+}
+
+// ── pH simulator bindings ──
+// Bind both 'input' (sliders) and 'change' (checkbox) for reliability
+document.querySelectorAll("#tab-ph input").forEach(i => {
+    i.addEventListener("input",  drawPh);
+    i.addEventListener("change", drawPh);
+});
+
+// Helper: set both slider and number input together
+function setPhInput(name, value) {
+    document.getElementById("input-" + name).value = value;
+    const num = document.getElementById("num-" + name);
+    if (num) num.value = value;
+}
+
+// Reset button
+document.getElementById("btn-reset-ph").addEventListener("click", () => {
+    setPhInput("hco3", PH_HCO3_DEFAULT);
+    setPhInput("pco2", PH_PCO2_DEFAULT);
+    document.getElementById("input-speed").value = 10;
+    document.getElementById("input-density").value = 12;
+    document.getElementById("toggle-ions").checked = true;
+    document.querySelectorAll(".scenario-btn").forEach(b => b.classList.remove("active"));
+    document.querySelector('.scenario-btn[data-scn="norma"]').classList.add("active");
+    drawPh();
+});
+
+// Clinical scenario buttons
+document.querySelectorAll(".scenario-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        if (btn.dataset.hco3) setPhInput("hco3", btn.dataset.hco3);
+        if (btn.dataset.pco2) setPhInput("pco2", btn.dataset.pco2);
+        document.querySelectorAll(".scenario-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        drawPh();
+    });
+});
+
+// Sync number inputs → matching slider (so typing a value updates the slider)
+["hco3", "pco2"].forEach(name => {
+    const num = document.getElementById("num-" + name);
+    const sld = document.getElementById("input-" + name);
+    num.addEventListener("input", () => {
+        const v = +num.value;
+        if (!isNaN(v)) {
+            const min = +sld.min, max = +sld.max;
+            sld.value = Math.max(min, Math.min(max, v));
+            drawPh();
+        }
+    });
+});
+
+// Mark "Norma" scenario as active on first load
+document.querySelector('.scenario-btn[data-scn="norma"]').classList.add("active");
+
+drawPh();
+
+// ═════════════════════════════════════════════
+//   VIEW ROUTER (homepage ↔ sections)
+// ═════════════════════════════════════════════
+function showView(name) {
+    const valid = ["home", "sims", "histo", "other"];
+    if (!valid.includes(name)) name = "home";
+    document.querySelectorAll(".view").forEach(v => {
+        v.classList.toggle("active", v.id === "view-" + name);
+    });
+    // Hide site-wide footer on the homepage (it has its own credit block)
+    const footer = document.getElementById("page-footer");
+    if (footer) footer.style.display = (name === "home") ? "none" : "";
+    // Update URL hash so the user can deep-link / back-button works naturally
+    if (location.hash !== "#" + name) {
+        history.replaceState(null, "", "#" + name);
+    }
+    // Always start at top when switching views
+    window.scrollTo({ top: 0, behavior: "instant" in window ? "instant" : "auto" });
+}
+
+document.querySelectorAll("[data-target]").forEach(btn => {
+    btn.addEventListener("click", () => showView(btn.dataset.target));
+});
+
+// Honor URL hash on initial load (e.g. someone bookmarked #sims)
+const initialHash = (location.hash || "").replace("#", "");
+showView(initialHash || "home");
+</script>
+</body>
+</html>
