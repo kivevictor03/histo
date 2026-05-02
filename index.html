@@ -186,6 +186,24 @@
         }
         .toggle-switch input:checked + .toggle-slider { background: #4a3070; }
         .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: #c084fc; }
+        #pain-windup-state {
+            transition: all .2s ease;
+            padding: 2px 8px;
+            border-radius: 8px;
+            display: inline-block;
+            min-width: 52px;
+            text-align: center;
+            border: 1px solid transparent;
+        }
+        #pain-windup-state.windup-on {
+            background: rgba(244,67,54,.16);
+            border-color: rgba(244,67,54,.45);
+            box-shadow: 0 0 10px rgba(244,67,54,.35);
+        }
+        #pain-windup-state.windup-off {
+            background: rgba(255,152,0,.14);
+            border-color: rgba(255,152,0,.35);
+        }
 
         /* ── pH simulator info card ── */
         .ph-info-card {
@@ -1501,9 +1519,10 @@ function drawPain() {
     const cf = +document.getElementById("input-cfiber").value;
     const drug = +document.getElementById("input-drug").value;
     const windupOn = document.getElementById("toggle-windup").checked;
-    const windupBoost = windupOn ? Math.min(40, cf * 0.4) : 0;
+    const windupBoost = windupOn ? Math.min(40, 8 + cf * 0.45) : 0;
     const inhibition = Math.min(100, drug * 1.2);
     const perceived = Math.max(0, Math.min(100, ad * 0.7 + cf * 0.9 + windupBoost - inhibition));
+    const dorsalHornAmp = Math.min(100, (ad * 0.35 + cf * 0.75) + windupBoost);
 
     document.getElementById("label-adelta").innerText = `${ad}%`;
     document.getElementById("label-cfiber").innerText = `${cf}%`;
@@ -1512,25 +1531,52 @@ function drawPain() {
     document.getElementById("pain-inhib").innerText = Math.round(inhibition);
     const ws = document.getElementById("pain-windup-state");
     ws.innerText = windupOn ? "ON" : "OFF";
-    ws.className = `stat-val ${windupOn ? "s-crit" : "s-warn"}`;
+    ws.className = `stat-val ${windupOn ? "s-crit windup-on" : "s-warn windup-off"}`;
 
     document.getElementById("pain-card-asc").classList.toggle("active", perceived >= 45);
     document.getElementById("pain-card-desc").classList.toggle("active", inhibition >= 30);
 
+    painSvg.selectAll("*").interrupt();
     painSvg.selectAll("*").remove();
-    painSvg.append("rect").attr("x", 20).attr("y", 35).attr("width", 780).attr("height", 90).attr("rx", 12).attr("fill", "#1a1108");
-    painSvg.append("rect").attr("x", 20).attr("y", 165).attr("width", 780).attr("height", 90).attr("rx", 12).attr("fill", "#0d1a2a");
-    painSvg.append("rect").attr("x", 20).attr("y", 295).attr("width", 780).attr("height", 90).attr("rx", 12).attr("fill", "#10101f");
+    painSvg.append("rect").attr("x", 16).attr("y", 20).attr("width", 788).attr("height", 380).attr("rx", 14).attr("fill", "#10101f").attr("stroke", "#24243e");
+    painSvg.append("rect").attr("x", 92).attr("y", 126).attr("width", 84).attr("height", 142).attr("rx", 16).attr("fill", "#151525").attr("stroke", "#32325a");
+    painSvg.append("text").attr("x", 100).attr("y", 122).attr("fill", "#9c9cbc").attr("font-size", "10px").text("DRG");
+    const dhColor = windupOn ? "#5a2132" : "#1a2336";
+    painSvg.append("rect").attr("x", 250).attr("y", 90).attr("width", 132).attr("height", 212).attr("rx", 16).attr("fill", dhColor).attr("stroke", windupOn ? "#ff6b6b" : "#415074").attr("stroke-width", windupOn ? 2.5 : 1.2);
+    painSvg.append("text").attr("x", 262).attr("y", 84).attr("fill", "#b8b8d0").attr("font-size", "11px").text("Róg grzbietowy");
+    painSvg.append("rect").attr("x", 500).attr("y", 150).attr("width", 170).attr("height", 18).attr("rx", 9).attr("fill", "#261934").attr("stroke", "#674488");
+    painSvg.append("text").attr("x", 502).attr("y", 146).attr("fill", "#bca3d6").attr("font-size", "10px").text("Droga rdzeniowo-wzgórzowa");
+    painSvg.append("ellipse").attr("cx", 730).attr("cy", 125).attr("rx", 50).attr("ry", 34).attr("fill", "#1f263f").attr("stroke", "#5f7eb8");
+    painSvg.append("text").attr("x", 698).attr("y", 128).attr("fill", "#cfd8ff").attr("font-size", "11px").text("Wzgórze/Kora");
+    painSvg.append("ellipse").attr("cx", 726).attr("cy", 286).attr("rx", 54).attr("ry", 30).attr("fill", "#182a2f").attr("stroke", "#55a9bf");
+    painSvg.append("text").attr("x", 692).attr("y", 290).attr("fill", "#99d9e8").attr("font-size", "11px").text("PAG / RVM");
+    painSvg.append("circle").attr("cx", 302).attr("cy", 226).attr("r", 15).attr("fill", "#14271f").attr("stroke", "#4caf50");
+    painSvg.append("text").attr("x", 278).attr("y", 252).attr("fill", "#8ddb93").attr("font-size", "10px").text("Interneuron");
 
-    const bar = (y, label, val, color) => {
-      painSvg.append("text").attr("x", 36).attr("y", y-8).attr("fill", "#bbb").attr("font-size", "12px").text(label);
-      painSvg.append("rect").attr("x", 36).attr("y", y).attr("width", 748).attr("height", 18).attr("rx", 9).attr("fill", "#2a2a40");
-      painSvg.append("rect").attr("x", 36).attr("y", y).attr("width", 7.48 * val).attr("height", 18).attr("rx", 9).attr("fill", color);
+    const addPath = (d, color, width, dash, speed) => {
+      const p = painSvg.append("path").attr("d", d).attr("fill", "none").attr("stroke", color).attr("stroke-width", width).attr("stroke-linecap", "round").attr("stroke-dasharray", dash).attr("opacity", .95);
+      (function animate(){ p.transition().duration(speed).ease(d3.easeLinear).attr("stroke-dashoffset", -dash).on("end", animate); })();
+      return p;
     };
-    bar(80, "Aδ: szybki ból", ad, "#ffb060");
-    bar(120, `C: wolny ból ${windupOn ? "+ wind-up" : ""}`, Math.min(100, cf + windupBoost), "#ff6b6b");
-    bar(210, "Hamowanie zstępujące / lek", inhibition, "#7ec8e3");
-    bar(340, "Wyjściowy sygnał bólowy", perceived, "#c084fc");
+    addPath("M40 112 C72 104,92 110,118 136 C134 152,148 168,174 176 C208 186,226 178,250 160 C276 144,284 138,302 136", "#ffb060", 4.2, 15, 460);
+    addPath("M40 218 C74 222,96 214,118 204 C146 192,162 206,178 224 C208 256,232 250,252 236 C274 222,286 214,304 206", "#ff6b6b", 6.5, 26, 980);
+    addPath("M336 154 C386 152,448 152,500 159 C560 166,622 142,682 130", "#c084fc", 5.8, 22, 700);
+    const inhib = addPath("M680 284 C620 282,544 248,484 220 C438 200,390 198,332 210", "#7ec8e3", 3 + (inhibition/35), 16, 620 - Math.min(260, drug*3));
+    inhib.attr("opacity", 0.35 + inhibition/145);
+
+    if (windupOn) {
+      painSvg.append("ellipse").attr("cx", 316).attr("cy", 178).attr("rx", 42).attr("ry", 54).attr("fill", "rgba(255,107,107,.15)").attr("stroke", "#ff6b6b").attr("stroke-dasharray", "4,4");
+      for (let i=0;i<3;i++) addPath(`M286 ${148+i*16} C300 ${154+i*10}, 322 ${158+i*10}, 338 ${166+i*10}`, "#ff8a80", 2.1, 8, 280 + i*80);
+      painSvg.append("text").attr("x", 268).attr("y", 110).attr("fill", "#ff9f9f").attr("font-size", "10px").text("Central sensitization");
+    }
+
+    const labels = [
+      [34,94,"Nocyceptor"], [36,246,"Włókno C • glutaminian, substancja P, CGRP"], [36,86,"Włókno Aδ • szybki, mielinowy"],
+      [98,280,"Neuron zwoju grzbietowego"], [255,306,"Neuron II-rzędowy"], [662,326,"Droga zstępująca PAG/RVM • 5-HT/NA"], [250,270,"Enkefaliny"]
+    ];
+    labels.forEach(([x,y,t]) => painSvg.append("text").attr("x",x).attr("y",y).attr("fill","#a7a7c2").attr("font-size","10px").text(t));
+    painSvg.append("rect").attr("x", 18).attr("y", 356).attr("width", 380).attr("height", 34).attr("rx", 8).attr("fill", "#161628").attr("stroke", "#2f2f52");
+    painSvg.append("text").attr("x", 28).attr("y", 376).attr("fill", "#cbcbe8").attr("font-size", "11px").text(`Ból: ${Math.round(perceived)}% | Hamowanie: ${Math.round(inhibition)}% | Amplifikacja rogu: ${Math.round(dorsalHornAmp)}%`);
 };
 
 document.querySelectorAll("#tab-pain input").forEach(i => {
