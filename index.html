@@ -491,6 +491,9 @@
         <button class="tab" data-tab="ph" type="button">
             <span class="tab-icon">⚗️</span> Komórki Wstawkowe (pH)
         </button>
+        <button class="tab" data-tab="pain" type="button">
+            <span class="tab-icon">🧠</span> Szlaki Bólu (Aδ/C)
+        </button>
     </div>
 
     <!-- ─── TAB 1: RENAL CORPUSCLE ─── -->
@@ -793,6 +796,38 @@
             </div>
         </div>
     </div><!-- /tab-ph -->
+
+    <!-- ─── TAB 3: PAIN MODULATION ─── -->
+    <div class="tab-pane" id="tab-pain">
+        <div class="header">
+            <div class="title-section">
+                <h1>Modulacja Bólu: Włókna Aδ, C i Wind-up</h1>
+                <p>Interaktywny model sumowania sygnału nocyceptywnego oraz hamowania zstępującego (PAG/RVM).</p>
+            </div>
+            <div class="stats-bar">
+                <div class="stat-item"><div class="stat-label">Ból odczuwany</div><div><span id="pain-out" class="stat-val">30</span> <span class="stat-unit">%</span></div></div>
+                <div class="stat-item"><div class="stat-label">Wind-up</div><div id="pain-windup-state" class="stat-val s-warn">OFF</div></div>
+                <div class="stat-item"><div class="stat-label">Hamowanie</div><div><span id="pain-inhib" class="stat-val">0</span> <span class="stat-unit">%</span></div></div>
+            </div>
+        </div>
+        <div class="main-grid">
+            <div class="left-col">
+                <div class="viz-wrapper"><svg id="pain-viz" viewBox="0 0 820 420" preserveAspectRatio="xMidYMid meet"></svg></div>
+                <div class="controls-header"><div class="controls-header-title">Parametry nocycepcji</div><button id="btn-reset-pain" class="reset-btn" type="button">⟲ Reset (norma)</button></div>
+                <div class="controls">
+                    <div class="control-group"><label>Aktywność włókien Aδ <span id="label-adelta">35%</span></label><input type="range" id="input-adelta" min="0" max="100" value="35"></div>
+                    <div class="control-group"><label>Aktywność włókien C <span id="label-cfiber">25%</span></label><input type="range" id="input-cfiber" min="0" max="100" value="25"></div>
+                    <div class="control-group"><label>Modulacja lekowa (opioid/SNRI) <span id="label-drug">0%</span></label><input type="range" id="input-drug" min="0" max="80" value="0"></div>
+                    <div class="toggle-row"><label for="toggle-windup">Wind-up (sensytyzacja)</label><span class="toggle-switch"><input type="checkbox" id="toggle-windup"><span class="toggle-slider"></span></span></div>
+                </div>
+            </div>
+            <div class="raas-panel">
+                <div class="raas-title">Interpretacja sygnału</div>
+                <div class="ph-info-card" id="pain-card-asc"><div class="ph-info-title">Tor wstępujący</div><div class="ph-info-row">• <b>Aδ</b>: szybki, ostry ból<br>• <b>C</b>: wolny, tępy ból<br>• Sumowanie zwiększa sygnał do wzgórza i kory.</div></div>
+                <div class="ph-info-card b-card" id="pain-card-desc"><div class="ph-info-title">Tor zstępujący</div><div class="ph-info-row">• Aktywacja hamowania: 5-HT/NA + enkefaliny<br>• Leki (opioid/SNRI) wzmacniają tłumienie<br>• Efekt: spadek sygnału bólowego.</div></div>
+            </div>
+        </div>
+    </div><!-- /tab-pain -->
 
     </div><!-- /view-sims -->
 
@@ -1454,6 +1489,62 @@ document.querySelectorAll(".scenario-btn").forEach(btn => {
 document.querySelector('.scenario-btn[data-scn="norma"]').classList.add("active");
 
 drawPh();
+
+// ═════════════════════════════════════════════
+//   PAIN SIMULATOR — Aδ/C + WIND-UP
+// ═════════════════════════════════════════════
+const painSvg = d3.select("#pain-viz");
+const PAIN_DEFAULTS = { adelta: 35, cfiber: 25, drug: 0, windup: false };
+
+function drawPain() {
+    const ad = +document.getElementById("input-adelta").value;
+    const cf = +document.getElementById("input-cfiber").value;
+    const drug = +document.getElementById("input-drug").value;
+    const windupOn = document.getElementById("toggle-windup").checked;
+    const windupBoost = windupOn ? Math.min(40, cf * 0.4) : 0;
+    const inhibition = Math.min(100, drug * 1.2);
+    const perceived = Math.max(0, Math.min(100, ad * 0.7 + cf * 0.9 + windupBoost - inhibition));
+
+    document.getElementById("label-adelta").innerText = `${ad}%`;
+    document.getElementById("label-cfiber").innerText = `${cf}%`;
+    document.getElementById("label-drug").innerText = `${drug}%`;
+    document.getElementById("pain-out").innerText = Math.round(perceived);
+    document.getElementById("pain-inhib").innerText = Math.round(inhibition);
+    const ws = document.getElementById("pain-windup-state");
+    ws.innerText = windupOn ? "ON" : "OFF";
+    ws.className = `stat-val ${windupOn ? "s-crit" : "s-warn"}`;
+
+    document.getElementById("pain-card-asc").classList.toggle("active", perceived >= 45);
+    document.getElementById("pain-card-desc").classList.toggle("active", inhibition >= 30);
+
+    painSvg.selectAll("*").remove();
+    painSvg.append("rect").attr("x", 20).attr("y", 35).attr("width", 780).attr("height", 90).attr("rx", 12).attr("fill", "#1a1108");
+    painSvg.append("rect").attr("x", 20).attr("y", 165).attr("width", 780).attr("height", 90).attr("rx", 12).attr("fill", "#0d1a2a");
+    painSvg.append("rect").attr("x", 20).attr("y", 295).attr("width", 780).attr("height", 90).attr("rx", 12).attr("fill", "#10101f");
+
+    const bar = (y, label, val, color) => {
+      painSvg.append("text").attr("x", 36).attr("y", y-8).attr("fill", "#bbb").attr("font-size", "12px").text(label);
+      painSvg.append("rect").attr("x", 36).attr("y", y).attr("width", 748).attr("height", 18).attr("rx", 9).attr("fill", "#2a2a40");
+      painSvg.append("rect").attr("x", 36).attr("y", y).attr("width", 7.48 * val).attr("height", 18).attr("rx", 9).attr("fill", color);
+    };
+    bar(80, "Aδ: szybki ból", ad, "#ffb060");
+    bar(120, `C: wolny ból ${windupOn ? "+ wind-up" : ""}`, Math.min(100, cf + windupBoost), "#ff6b6b");
+    bar(210, "Hamowanie zstępujące / lek", inhibition, "#7ec8e3");
+    bar(340, "Wyjściowy sygnał bólowy", perceived, "#c084fc");
+};
+
+document.querySelectorAll("#tab-pain input").forEach(i => {
+    i.addEventListener("input", drawPain);
+    i.addEventListener("change", drawPain);
+});
+document.getElementById("btn-reset-pain").addEventListener("click", () => {
+    document.getElementById("input-adelta").value = PAIN_DEFAULTS.adelta;
+    document.getElementById("input-cfiber").value = PAIN_DEFAULTS.cfiber;
+    document.getElementById("input-drug").value = PAIN_DEFAULTS.drug;
+    document.getElementById("toggle-windup").checked = PAIN_DEFAULTS.windup;
+    drawPain();
+});
+drawPain();
 
 // ═════════════════════════════════════════════
 //   VIEW ROUTER (homepage ↔ sections)
